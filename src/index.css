@@ -1,0 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+
+@theme {
+    --primary: #0077b6;
+    --primary-hover: #0069a1;
+    --color-bermuda: #78dcca;
+  }
+  
+  /* Custom scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px; /* Scrollbar width */
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f0f0; /* Track background */
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #9333ea; /* Purple thumb color */
+    border-radius: 10px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #7e22ce; /* Darker purple on hover */
+  }
+
+  
+@import "tailwindcss"
+
+
