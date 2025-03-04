@@ -53,7 +53,7 @@ export default function Chat() {
             id: 0,
             question: "", // No user question
             answer:
-              "Hello! I’m your CTC Heat Pump Support Agent. I can assist with installation, troubleshooting, and general usage tips—in multiple languages. If I’m ever unsure, I’ll let you know and offer my best guidance. How can I help you today?",
+              "Hi, How can I help you today?",
           });
         }
         setMessages(chatHistory);

@@ -279,7 +279,7 @@ const Sidebar = ({ toggleSidebar, isOpen }: SidebarInterface) => {
                   {activeChat === chat.id && (
                     <div className="popover-card absolute right-0 top-10 bg-white shadow-lg rounded-md p-2 z-10 w-32 border">
                       <button
-                        className="w-full text-left px-3 py-1 hover:bg-blue-500 hover:text-white text-gray-700  border border-blue-600 rounded-lg hover:cursor-pointer"
+                        className="w-full text-left px-3 py-1 hover:bg-blue-500 hover:text-white text-gray-700  border border-purple-600 rounded-lg hover:cursor-pointer"
                         onClick={() => {
                           setShowEditModal(true);
                           setActiveChat(null);
@@ -309,7 +309,7 @@ const Sidebar = ({ toggleSidebar, isOpen }: SidebarInterface) => {
             className={`flex items-center px-6 mt-1  mb-2 py-3 rounded-2xl hover:bg-blue-600  hover:text-white ${
               active === "Settings"
                 ? "bg-blue-500 text-white"
-                : "text-purple-600 bg-gray-100"
+                : "text-blue-600 bg-gray-100"
             }`}
           >
             <MdOutlineSettingsSuggest className="mr-3" size={20} />

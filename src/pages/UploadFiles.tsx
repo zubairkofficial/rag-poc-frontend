@@ -430,7 +430,7 @@ const UploadPage = () => {
               </p>
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-1">
               {uploadedFiles.map((file) => (
                 <div key={file.id} className="bg-gray-50 rounded-lg p-4 transition-all duration-200 hover:shadow-md border border-gray-100 hover:border-blue-200">
                   <div className="flex items-start">
