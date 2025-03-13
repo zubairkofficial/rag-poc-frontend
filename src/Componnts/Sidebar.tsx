@@ -35,6 +35,7 @@ import DeleteModal from "../Componnts/DeleteModal";
 import EditModal from "./EditModal";
 import { notifyResponse } from "../Helper/notify";
 import { IoChevronDownOutline, IoChevronUpOutline } from "react-icons/io5";
+import { BiBot } from "react-icons/bi";
 
 interface SidebarInterface {
   toggleSidebar: () => void;
@@ -227,6 +228,21 @@ const Sidebar = ({ toggleSidebar, isOpen }: SidebarInterface) => {
           </Link>
           }
           {
+            type === "admin" &&
+
+          <Link
+            onClick={toggleSidebar}
+            to="/admin/widget"
+            className={`flex my-2 items-center px-6 py-3 rounded-2xl hover:bg-blue-600 hover:text-white ${
+              active === "Widget" ? "bg-blue-500 text-white" : "text-gray-800"
+            }`}
+          >
+            <BiBot className="mr-3" size={20} />
+            <span>Widget</span>
+          </Link>
+          }
+          {
+
             type == "admin" &&
           <div
             className={`relative ${

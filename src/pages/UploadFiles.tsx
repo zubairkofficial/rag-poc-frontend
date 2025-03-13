@@ -1,8 +1,10 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
-import { FiUpload, FiAlertCircle, FiYoutube, FiFileText } from "react-icons/fi"
-import { AiOutlineDelete } from "react-icons/ai"
+import { FiUpload, FiAlertCircle, FiYoutube, FiFileText, FiGlobe } from "react-icons/fi"
+import { AiOutlineDelete, AiOutlinePlus } from "react-icons/ai"
 import { BsCheckCircle, BsUpload } from "react-icons/bs"
 import { FaRegEye, FaRegFilePdf } from "react-icons/fa"
 import Loader from "../Componnts/LoaderUpload"
@@ -18,7 +20,7 @@ interface UploadedFile {
   url: string
   status: boolean
   path: string
-  type?: string // 'youtube' or 'file'
+  type?: string // 'youtube' or 'file' or 'web'
 }
 
 interface FetchFileInterface {
@@ -35,10 +37,12 @@ const UploadPage = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [deleteFileId, setDeleteFileId] = useState<number | null>(null)
-  const [youtubeUrl, setYoutubeUrl] = useState("")
   const [isAddingYoutube, setIsAddingYoutube] = useState(false)
-  const [activeTab, setActiveTab] = useState<"pdf" | "youtube">("pdf")
+  const [activeTab, setActiveTab] = useState<"pdf" | "youtube" | "web">("pdf")
   const [dragActive, setDragActive] = useState(false)
+  const [webUrls, setWebUrls] = useState<string[]>([""])
+  const [isAddingWebContent, setIsAddingWebContent] = useState(false)
+  const [processingUrls, setProcessingUrls] = useState<{ [key: string]: boolean }>({})
 
   useEffect(() => {
     fetchFiles()
@@ -93,7 +97,7 @@ const UploadPage = () => {
     e.preventDefault()
     e.stopPropagation()
     setDragActive(false)
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       handleFileSelect(e.dataTransfer.files)
     }
@@ -140,11 +144,11 @@ const UploadPage = () => {
   }
 
   const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes'
+    if (bytes === 0) return "0 Bytes"
     const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const sizes = ["Bytes", "KB", "MB", "GB"]
     const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
 
   const handleDelete = async () => {
@@ -199,47 +203,146 @@ const UploadPage = () => {
     }
   }
 
-  const handleYoutubeSubmit = async () => {
-    if (!youtubeUrl) {
+  const validateUrl = (url: string): boolean => {
+    try {
+      new URL(url)
+      return true
+    } catch (e) {
+      return false
+    }
+  }
+
+  const handleWebUrlChange = (index: number, value: string) => {
+    const newWebUrls = [...webUrls]
+    newWebUrls[index] = value
+    setWebUrls(newWebUrls)
+  }
+
+  const handleRemoveWebUrlField = (index: number) => {
+    const newWebUrls = [...webUrls]
+    newWebUrls.splice(index, 1)
+    setWebUrls(newWebUrls.length > 0 ? newWebUrls : [""])
+  }
+
+  const handleAddWebUrlField = () => {
+    setWebUrls([...webUrls, ""])
+  }
+
+  const handleWebContentSubmit = async () => {
+    // Filter out empty URLs and validate
+    const validUrls = webUrls.filter((url) => url.trim() !== "")
+
+    if (validUrls.length === 0) {
       return notifyResponse({
         success: false,
-        detail: "Please enter a YouTube URL",
+        detail: "Please enter at least one valid URL",
       })
     }
 
-    // Basic YouTube URL validation
-    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.?be)\/.+$/
-    if (!youtubeRegex.test(youtubeUrl)) {
+    // Check if all URLs are valid
+    const invalidUrls = validUrls.filter((url) => !validateUrl(url))
+    if (invalidUrls.length > 0) {
       return notifyResponse({
         success: false,
-        detail: "Please enter a valid YouTube URL",
+        detail: `Invalid URL format: ${invalidUrls.join(", ")}`,
       })
     }
+
+    setIsAddingWebContent(true)
 
     try {
-      setIsAddingYoutube(true)
-      const response = await backendRequest("POST", "/add-transcription", { video_url: youtubeUrl })
+      // Send all URLs in a single request
+      const response = await backendRequest("POST", "/add-web-content", {
+        urls: validUrls,
+      })
 
       if (response.success) {
-        setYoutubeUrl("")
+        notifyResponse({
+          success: true,
+          detail: `Successfully added content from ${validUrls.length} URL(s)`,
+        })
+
+        // Clear the form and refresh files
+        setWebUrls([""])
         await fetchFiles()
-        notifyResponse(response, "Youtube Video uploaded successfully")
       } else {
         notifyResponse(response)
       }
     } catch (error) {
-      console.error("Failed to add YouTube video:", error)
+      console.error("Failed to add web content:", error)
       notifyResponse({
         success: false,
-        detail: "Failed to add YouTube video. Please try again.",
+        detail: "Failed to add web content. Please try again.",
+      })
+    } finally {
+      setIsAddingWebContent(false)
+    }
+  }
+
+  const handleMultipleYoutubeUpload = async () => {
+    // Similar implementation to web content but for YouTube URLs
+    const validUrls = webUrls.filter((url) => url.trim() !== "")
+
+    if (validUrls.length === 0) {
+      return notifyResponse({
+        success: false,
+        detail: "Please enter at least one YouTube URL",
+      })
+    }
+
+    // Check if all URLs are YouTube URLs
+    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.?be)\/.+$/
+    const invalidUrls = validUrls.filter((url) => !youtubeRegex.test(url))
+    if (invalidUrls.length > 0) {
+      return notifyResponse({
+        success: false,
+        detail: `Invalid YouTube URL format: ${invalidUrls.join(", ")}`,
+      })
+    }
+
+    setIsAddingYoutube(true)
+
+    try {
+      // Process each YouTube URL individually
+      for (const url of validUrls) {
+        setProcessingUrls((prev) => ({ ...prev, [url]: true }))
+
+        const response = await backendRequest("POST", "/add-transcription", {
+          video_url: url,
+        })
+
+        if (response.success) {
+          notifyResponse({
+            success: true,
+            detail: `Successfully added YouTube video: ${url}`,
+          })
+        } else {
+          notifyResponse({
+            success: false,
+            detail: `Failed to add YouTube video ${url}: ${response.detail || "Unknown error"}`,
+          })
+        }
+
+        setProcessingUrls((prev) => ({ ...prev, [url]: false }))
+      }
+
+      // Clear the form and refresh files
+      setWebUrls([""])
+      await fetchFiles()
+    } catch (error) {
+      console.error("Failed to add YouTube videos:", error)
+      notifyResponse({
+        success: false,
+        detail: "Failed to add YouTube videos. Please try again.",
       })
     } finally {
       setIsAddingYoutube(false)
+      setProcessingUrls({})
     }
   }
 
   return (
-    <div className="bg-gray-100  min-h-[90vh]">
+    <div className="bg-gray-100 min-h-[90vh]">
       <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-800 mb-2 flex items-center">
@@ -251,7 +354,7 @@ const UploadPage = () => {
 
         {/* Tabs Card */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-8 transition-all duration-300 hover:shadow-xl">
-          <div className="flex border-b">
+          <div className="flex border-b flex-wrap">
             <button
               className={`flex-1 py-4 px-4 text-center font-medium transition-all duration-200 ${
                 activeTab === "pdf"
@@ -267,8 +370,8 @@ const UploadPage = () => {
             </button>
             <button
               className={`flex-1 py-4 px-4 text-center font-medium transition-all duration-200 ${
-                activeTab === "youtube" 
-                  ? "text-blue-500 border-b-2 border-blue-500 bg-blue-50" 
+                activeTab === "youtube"
+                  ? "text-blue-500 border-b-2 border-blue-500 bg-blue-50"
                   : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
               }`}
               onClick={() => setActiveTab("youtube")}
@@ -278,15 +381,28 @@ const UploadPage = () => {
                 <span>YouTube URL</span>
               </div>
             </button>
+            <button
+              className={`flex-1 py-4 px-4 text-center font-medium transition-all duration-200 ${
+                activeTab === "web"
+                  ? "text-blue-500 border-b-2 border-blue-500 bg-blue-50"
+                  : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+              }`}
+              onClick={() => setActiveTab("web")}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <FiGlobe className="size-5" />
+                <span>Web Content</span>
+              </div>
+            </button>
           </div>
-          
+
           <div className="p-6">
             {activeTab === "pdf" && (
               <div
                 className={`transition-all duration-200 ease-in-out ${isUploading ? "opacity-50 pointer-events-none" : ""}`}
               >
                 {/* Drag and drop area */}
-                <div 
+                <div
                   className={`border-2 border-dashed rounded-lg p-8 mb-4 text-center transition-all duration-200 
                     ${dragActive ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:border-blue-400"}
                     ${newFiles.length > 0 ? "bg-green-50 border-green-300" : ""}`}
@@ -304,7 +420,7 @@ const UploadPage = () => {
                     onChange={(e) => handleFileSelect(e.target.files)}
                     disabled={isUploading}
                   />
-                  
+
                   {newFiles.length > 0 ? (
                     <div>
                       <BsCheckCircle className="mx-auto h-12 w-12 text-green-500 mb-3" />
@@ -326,10 +442,10 @@ const UploadPage = () => {
                       <p className="text-xs text-gray-400">Maximum file size: 500MB</p>
                     </div>
                   )}
-                  
+
                   <div className="mt-4 flex justify-center">
-                    <label 
-                      htmlFor="file-upload" 
+                    <label
+                      htmlFor="file-upload"
                       className="cursor-pointer inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200"
                     >
                       <FaRegFilePdf className="mr-2 size-4" />
@@ -337,7 +453,7 @@ const UploadPage = () => {
                     </label>
                   </div>
                 </div>
-                
+
                 {newFiles.length > 0 && (
                   <div className="flex justify-center">
                     <button
@@ -369,28 +485,56 @@ const UploadPage = () => {
                       <div>
                         <h3 className="text-md font-medium text-gray-900 mb-1">Add YouTube Videos</h3>
                         <p className="text-sm text-gray-600">
-                          Enter a YouTube URL to extract and add its content to your knowledge base.
+                          Enter YouTube URLs to extract and add their content to your knowledge base.
                         </p>
                       </div>
                     </div>
                   </div>
-                  
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex-grow">
-                      <input
-                        id="youtube-url"
-                        value={youtubeUrl}
-                        onChange={(e) => setYoutubeUrl(e.target.value)}
-                        type="text"
-                        className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        placeholder="https://www.youtube.com/watch?v=..."
-                        disabled={isAddingYoutube}
-                      />
-                    </div>
+
+                  <div className="space-y-3">
+                    {webUrls.map((url, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <div className="flex-grow">
+                          <input
+                            type="text"
+                            value={url}
+                            onChange={(e) => handleWebUrlChange(index, e.target.value)}
+                            className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                            placeholder="https://www.youtube.com/watch?v=..."
+                            disabled={isAddingYoutube}
+                          />
+                        </div>
+                        {processingUrls[url] && (
+                          <div className="w-10 flex justify-center">
+                            <Loader size="sm" />
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveWebUrlField(index)}
+                          className="p-2 text-red-500 hover:text-red-700 rounded-full hover:bg-red-50"
+                          disabled={webUrls.length === 1 || isAddingYoutube}
+                        >
+                          <AiOutlineDelete className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-between mt-4">
                     <button
-                      onClick={handleYoutubeSubmit}
+                      type="button"
+                      onClick={handleAddWebUrlField}
+                      className="flex items-center gap-1 text-blue-500 hover:text-blue-700 px-3 py-1 rounded hover:bg-blue-50"
+                      disabled={isAddingYoutube}
+                    >
+                      <AiOutlinePlus /> Add Another URL
+                    </button>
+
+                    <button
+                      onClick={handleMultipleYoutubeUpload}
                       className="flex items-center justify-center gap-2 bg-blue-500 text-white rounded-full py-2 px-6 hover:bg-blue-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                      disabled={isAddingYoutube || !youtubeUrl}
+                      disabled={isAddingYoutube || webUrls.every((url) => !url.trim())}
                     >
                       {isAddingYoutube ? (
                         <>
@@ -398,7 +542,82 @@ const UploadPage = () => {
                         </>
                       ) : (
                         <>
-                          <FiYoutube /> Add Video
+                          <FiYoutube /> Upload Videos
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "web" && (
+              <div className="transition-all duration-200 ease-in-out">
+                <div className="max-w-2xl mx-auto">
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-6">
+                    <div className="flex items-start">
+                      <FiGlobe className="h-6 w-6 text-blue-500 mr-3 mt-1" />
+                      <div>
+                        <h3 className="text-md font-medium text-gray-900 mb-1">Add Web Content</h3>
+                        <p className="text-sm text-gray-600">
+                          Enter website URLs to extract and add their content to your knowledge base.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {webUrls.map((url, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <div className="flex-grow">
+                          <input
+                            type="text"
+                            value={url}
+                            onChange={(e) => handleWebUrlChange(index, e.target.value)}
+                            className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                            placeholder="https://example.com/page"
+                            disabled={isAddingWebContent}
+                          />
+                        </div>
+                        {processingUrls[url] && (
+                          <div className="w-10 flex justify-center">
+                            <Loader size="sm" />
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveWebUrlField(index)}
+                          className="p-2 text-red-500 hover:text-red-700 rounded-full hover:bg-red-50"
+                          disabled={webUrls.length === 1 || isAddingWebContent}
+                        >
+                          <AiOutlineDelete className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-between mt-4">
+                    <button
+                      type="button"
+                      onClick={handleAddWebUrlField}
+                      className="flex items-center gap-1 text-blue-500 hover:text-blue-700 px-3 py-1 rounded hover:bg-blue-50"
+                      disabled={isAddingWebContent}
+                    >
+                      <AiOutlinePlus /> Add Another URL
+                    </button>
+
+                    <button
+                      onClick={handleWebContentSubmit}
+                      className="flex items-center justify-center gap-2 bg-blue-500 text-white rounded-full py-2 px-6 hover:bg-blue-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                      disabled={isAddingWebContent || webUrls.every((url) => !url.trim())}
+                    >
+                      {isAddingWebContent ? (
+                        <>
+                          <Loader size="sm" /> Processing...
+                        </>
+                      ) : (
+                        <>
+                          <FiGlobe /> Add Web Content
                         </>
                       )}
                     </button>
@@ -426,22 +645,29 @@ const UploadPage = () => {
               <FiAlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-800 mb-1">No files in your knowledge base</h3>
               <p className="text-gray-500 max-w-md mx-auto">
-                Upload PDF documents or add YouTube videos to create your knowledge base
+                Upload PDF documents, add YouTube videos, or import web content to create your knowledge base
               </p>
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-1">
               {uploadedFiles.map((file) => (
-                <div key={file.id} className="bg-gray-50 rounded-lg p-4 transition-all duration-200 hover:shadow-md border border-gray-100 hover:border-blue-200">
+                <div
+                  key={file.id}
+                  className="bg-gray-50 rounded-lg p-4 transition-all duration-200 hover:shadow-md border border-gray-100 hover:border-blue-200"
+                >
                   <div className="flex items-start">
-                    <div className={`flex-shrink-0 p-2 rounded-lg mr-3 ${file.type === "youtube" ? "bg-red-100" : "bg-blue-100"}`}>
+                    <div
+                      className={`flex-shrink-0 p-2 rounded-lg mr-3 ${
+                        file.type === "youtube" ? "bg-red-100" : file.type === "website" ? "bg-blue-100" : "bg-blue-100"
+                      }`}
+                    >
                       {file.type === "youtube" ? (
                         <FiYoutube className="w-6 h-6 text-red-500" />
-                      ) : (
-                        <FaRegFilePdf className="w-6 h-6 text-blue-500" />
-                      )}
+                      ) : file.type === "website" ? (
+                        <FiGlobe className="w-6 h-6 text-blue-500" />
+                      ): ""}
                     </div>
-                    
+
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start">
                         <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
@@ -460,22 +686,15 @@ const UploadPage = () => {
                           </div>
                         </div>
                       </div>
-                      
+
                       <p className="text-xs text-gray-500 mt-1">
-                        {file.type === "youtube" ? (
-                          <a
-                            href={file.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-500 hover:underline"
-                          >
-                            {file.url}
-                          </a>
-                        ) : (
-                          "PDF Document"
-                        )}
+                        {file.type === "youtube"
+                          ? "Youtube Video"
+                          : file.type === "website"
+                            ? "Website Page Content"
+                            : "PDF Document"}
                       </p>
-                      
+
                       <div className="flex items-center justify-between mt-3">
                         <div className="text-xs text-gray-500">
                           {file.status ? (
@@ -488,9 +707,9 @@ const UploadPage = () => {
                             </span>
                           )}
                         </div>
-                        
+
                         <div className="flex space-x-3">
-                          {file.type !== "youtube" && (
+                          {file.type !== "youtube" && file.type !== "web" && (
                             <button
                               onClick={() => handleViewPdf(file.id)}
                               className="text-green-500 hover:text-green-600 transition-colors duration-200 rounded-full hover:bg-green-50 p-1"
@@ -499,7 +718,17 @@ const UploadPage = () => {
                               <FaRegEye className="w-5 h-5" />
                             </button>
                           )}
-                          
+                          {(file.type === "youtube" || file.type === "web") && (
+                            <a
+                              href={file.path}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-green-500 hover:text-green-600 transition-colors duration-200 rounded-full hover:bg-green-50 p-1"
+                            >
+                              <FaRegEye className="w-5 h-5" />
+                            </a>
+                          )}
+
                           <button
                             onClick={() => {
                               setDeleteFileId(file.id)
@@ -520,7 +749,7 @@ const UploadPage = () => {
           )}
         </div>
       </div>
-      
+
       <DeleteModal
         isOpen={isDeleteModalOpen}
         onCancel={() => setIsDeleteModalOpen(false)}
@@ -532,3 +761,4 @@ const UploadPage = () => {
 }
 
 export default UploadPage
+

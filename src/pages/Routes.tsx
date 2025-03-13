@@ -7,6 +7,7 @@ import Chat from "./Chat";
 import UploadPage from "./UploadFiles";
 import Settings from "./Settings";
 import Home from "./Home";
+import WidgetGenerator from "./WidgetGenerator";
 
 
 const Login = lazy(() => import("./Login"));
@@ -34,6 +35,8 @@ const AppRoutes = () => {
             <Route path="chat/:id" element={<LoginChecker allowedUser="logged-in"><Chat /></LoginChecker>} />
             <Route path="files" element={<LoginChecker allowedUser="logged-in"><UploadPage /></LoginChecker>} />
             <Route path="settings" element={<LoginChecker allowedUser="logged-in"><Settings /></LoginChecker>} />
+            <Route path="widget" element={<LoginChecker allowedUser="logged-in"><WidgetGenerator /></LoginChecker>} />
+
             </Route>
             {/* user routes */}
             <Route path="/user" element={<Layout/> }>
