@@ -709,7 +709,7 @@ const UploadPage = () => {
                         </div>
 
                         <div className="flex space-x-3">
-                          {file.type !== "youtube" && file.type !== "web" && (
+                          {file.type !== "youtube" && file.type !== "website" && (
                             <button
                               onClick={() => handleViewPdf(file.id)}
                               className="text-green-500 hover:text-green-600 transition-colors duration-200 rounded-full hover:bg-green-50 p-1"
@@ -718,7 +718,7 @@ const UploadPage = () => {
                               <FaRegEye className="w-5 h-5" />
                             </button>
                           )}
-                          {(file.type === "youtube" || file.type === "web") && (
+                          {(file.type === "youtube" || file.type === "website") && (
                             <a
                               href={file.path}
                               target="_blank"
