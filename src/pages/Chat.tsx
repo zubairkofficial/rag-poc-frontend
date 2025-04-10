@@ -2,12 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import { LuUser, LuBot } from "react-icons/lu";
 import { IoIosSend } from "react-icons/io";
 import { HiOutlineSparkles } from "react-icons/hi2";
+import { IoMdClose } from "react-icons/io";
 import {
   backendRequest,
   backendStreamingRequest,
 } from "../Helper/BackendReques";
 import { useParams } from "react-router-dom";
-// import Markdown from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -21,10 +21,23 @@ interface Message {
   question?: string;
   answer?: string;
 }
+
 interface GetChatInterface {
   chat: Message[];
   success: boolean;
-  // answer?: string;
+}
+
+interface ChunkData {
+  document: string;
+  cmetadata: string;
+}
+
+interface ChunkMetadata {
+  id: string;
+  title: string;
+  source: string;
+  file_id: number;
+  chunk_id: string;
 }
 
 export default function Chat() {
@@ -34,6 +47,12 @@ export default function Chat() {
   const [chatFetchLoading, setChatFetchLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { id } = useParams();
+  
+  // Citation modal state
+  const [showCitationModal, setShowCitationModal] = useState(false);
+  const [currentChunk, setCurrentChunk] = useState<ChunkData | null>(null);
+  const [chunkLoading, setChunkLoading] = useState(false);
+  const [citationPosition, setCitationPosition] = useState({ top: 0, left: 0 });
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -61,7 +80,6 @@ export default function Chat() {
       } else {
         notifyResponse(response);
       }
-      console.log("response", response);
     } catch (error) {
     } finally {
       setChatFetchLoading(false);
@@ -131,17 +149,80 @@ export default function Chat() {
     }
   };
 
+  // Function to fetch chunk data when citation is clicked
+  const fetchChunkData = async (chunkId: string, event: React.MouseEvent) => {
+    // Get position for the modal
+    const rect = event.currentTarget.getBoundingClientRect();
+    setCitationPosition({
+      top: rect.bottom + window.scrollY,
+      left: rect.left + window.scrollX
+    });
+    
+    setChunkLoading(true);
+    try {
+      const response = await backendRequest<ChunkData>(
+        "GET",
+        `/chunks/${chunkId}`
+      );
+      setCurrentChunk(response);
+      setShowCitationModal(true);
+    } catch (error) {
+      notifyResponse({
+        success: false,
+        detail: "Failed to load citation data",
+      });
+    } finally {
+      setChunkLoading(false);
+    }
+  };
+
+  const extractChunkId = (url: string) => {
+    const parts = url.split('/');
+    return parts[parts.length - 1];
+  };
+
+  // Parse metadata from JSON string
+  const parseMetadata = (metadataString: string): ChunkMetadata => {
+    try {
+      return JSON.parse(metadataString);
+    } catch (e) {
+      return {
+        id: "",
+        title: "Unknown Title",
+        source: "",
+        file_id: 0,
+        chunk_id: ""
+      };
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const modal = document.getElementById('citation-modal');
+      if (modal && !modal.contains(event.target as Node)) {
+        setShowCitationModal(false);
+      }
+    };
+
+    if (showCitationModal) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCitationModal]);
+
   return (
     <div className="min-h-[85vh] bg-gray-100">
       <div className="h-[90vh] flex flex-col">
         {/* Header */}
         <div className="bg-blue-500 p-4 flex items-center gap-3">
           <HiOutlineSparkles className="w-6 h-6 text-purple-100" />
-          <h1 className="text-xl font-semibold text-white">AI Assistant</h1>
+          <h1 className="text-xl font-semibold text-white">MetabolicMD</h1>
         </div>
 
         {chatFetchLoading ? (
-          <div className=" flex flex-col text-center py-8 flex-1 items-center justify-center ">
+          <div className="flex flex-col text-center py-8 flex-1 items-center justify-center">
             <Loader size="md" color="purple" />
             <p className="text-gray-500 mt-3">Loading chat...</p>
           </div>
@@ -176,16 +257,31 @@ export default function Chat() {
                             <strong className="font-semibold">{children}</strong>
                           ),
                           em: ({ children }) => <em className="italic">{children}</em>,
-                          a: ({ href, children }) => (
-                            <a
-                              href={href}
-                              className="text-blue-600 hover:underline"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              {children}
-                            </a>
-                          ),
+                          a: ({ href, children }) => {
+                            if (href && href.includes('/api/chunks/')) {
+                              const chunkId = extractChunkId(href);
+                              return (
+                                <sup>
+                                  <button
+                                    onClick={(e) => fetchChunkData(chunkId, e)}
+                                    className="inline-flex items-center m-1 px-1 rounded bg-blue-100 text-blue-800 text-xs font-medium hover:bg-blue-200 transition-colors cursor-pointer"
+                                  >
+                                    {children}
+                                  </button>
+                                </sup>
+                              );
+                            }
+                            return (
+                              <a
+                                href={href}
+                                className="text-blue-600 hover:underline"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {children}
+                              </a>
+                            );
+                          },
                           ul: ({ children }) => <ul className="list-disc ml-5">{children}</ul>,
                           ol: ({ children }) => <ol className="list-decimal ml-5">{children}</ol>,
                           li: ({ children }) => <li className="mb-1">{children}</li>,
@@ -200,14 +296,10 @@ export default function Chat() {
                             </code>
                           ),
                           h1: ({ children }) => (
-                            <h1 className="text-4xl font-bold ">
-                              {children}
-                            </h1>
+                            <h1 className="text-4xl font-bold">{children}</h1>
                           ),
                           h2: ({ children }) => (
-                            <h2 className="text-3xl font-bold">
-                              {children}
-                            </h2>
+                            <h2 className="text-3xl font-bold">{children}</h2>
                           ),
                           h3: ({ children }) => (
                             <h3 className="text-2xl font-bold">{children}</h3>
@@ -222,9 +314,6 @@ export default function Chat() {
                       >
                         {msg.answer}
                       </ReactMarkdown>
-
-
-                      {/* <Markdown className="">{msg.answer}</Markdown> */}
                     </div>
                   </div>
                 )}
@@ -269,14 +358,14 @@ export default function Chat() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={(e) => e.key === "Enter" && handleSend()}
-            // disabled={isLoading}
             />
             <button
               disabled={!input.trim() || isLoading}
-              className={` text-white  p-3 rounded-full ${isLoading || !input.trim()
-                  ? "hover:cursor-not-allowed bg-blue-500 "
+              className={`text-white p-3 rounded-full ${
+                isLoading || !input.trim()
+                  ? "hover:cursor-not-allowed bg-blue-500"
                   : "hover:cursor-pointer hover:bg-blue-600 bg-blue-500"
-                }  transition-colors focus:outline-none focus:ring-2 focus:ring-blue-600/50`}
+              } transition-colors focus:outline-none focus:ring-2 focus:ring-blue-600/50`}
               onClick={handleSend}
             >
               <IoIosSend className="w-5 h-5" />
@@ -284,6 +373,92 @@ export default function Chat() {
           </div>
         </div>
       </div>
+
+      {/* Citation Popover/Modal - Now positioned relative to citation */}
+      {showCitationModal && currentChunk && (
+        <div 
+          className="fixed z-50"
+          style={{
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '1rem'
+          }}
+        >
+          <div 
+            id="citation-modal"
+            className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden"
+            style={{
+              maxHeight: '80vh'
+            }}
+          >
+            {/* Header */}
+            <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-sm font-medium text-gray-700 truncate">
+                {currentChunk.cmetadata && parseMetadata(currentChunk.cmetadata).title}
+              </h3>
+              <button
+                onClick={() => setShowCitationModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <IoMdClose className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Content */}
+            <div className="overflow-y-auto" style={{ maxHeight: 'calc(80vh - 120px)' }}>
+              {chunkLoading ? (
+                <div className="flex justify-center items-center h-32">
+                  <Loader size="sm" color="purple" />
+                </div>
+              ) : (
+                <div>
+                  {/* Source */}
+                  <div className="px-4 py-2 border-b border-gray-100 bg-blue-50">
+                  <p className="text-xs text-gray-500">
+                      <strong>Title:</strong>{" "}
+                     <span className="">{parseMetadata(currentChunk.cmetadata).title}</span>
+                    </p>
+
+                    <p className="text-xs text-gray-500">
+                      <strong>Source:</strong>{" "}
+                      <a
+                        href={parseMetadata(currentChunk.cmetadata).source}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline"
+                      >
+                        {parseMetadata(currentChunk.cmetadata).source}
+                      </a>
+                    </p>
+                  </div>
+                  
+                  <div className="p-4">
+                    <div className="text-sm text-gray-700 whitespace-pre-line">
+                      {currentChunk.document}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Footer */}
+            <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => setShowCitationModal(false)}
+                className="px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

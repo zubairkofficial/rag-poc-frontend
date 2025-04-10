@@ -20,13 +20,15 @@ interface ApiResponse {
 }
 
 interface ApiKeyData {
-  api_key: string;
-  modal: string;
-  base_url?: string;
-  provider?: string;
+  openai_api_key: string;
+  gemini_api_key: string;
+  modal?: string;
+  model?: string;
+  provider: string;
+  prompt?: string;
 }
 
-interface settingFormData {
+interface SettingFormData {
   name: string;
   email: string;
   currentPassword: string;
@@ -42,13 +44,12 @@ interface ModelOption {
 interface ProviderOption {
   name: string;
   value: string;
-  baseUrl: string;
   models: ModelOption[];
 }
 
-const intitalForm = {
-  name: user.name ? user.name : "",
-  email: user.email ? user.email : "",
+const initialForm = {
+  name: user.name || "",
+  email: user.email || "",
   currentPassword: "",
   newPassword: "",
   confirmNewPassword: "",
@@ -58,7 +59,6 @@ const providerOptions: ProviderOption[] = [
   {
     name: "OpenAI",
     value: "openai",
-    baseUrl: "https://api.openai.com/v1/",
     models: [
       { name: "GPT-4O-mini", value: "gpt-4o-mini" },
       { name: "GPT-4O", value: "gpt-4o" }
@@ -66,20 +66,18 @@ const providerOptions: ProviderOption[] = [
   },
   {
     name: "Gemini",
-    value: "gemini",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
+    value: "google_genai",
     models: [
-      { name: "Gemini 1.5 Pro", value: "gemini-1.5-pro-002" },
+      // { name: "Gemini 1.5 Pro", value: "gemini-1.5-pro-002" },
       { name: "Gemini 2.0 Flash", value: "gemini-2.0-flash" },
-      { name: "Gemini 1.5 Flash", value: "gemini-1.5-flash" },
+      // { name: "Gemini 1.5 Flash", value: "gemini-1.5-flash" },
       { name: "Gemini 2.0 Flash Experimental", value: "gemini-2.0-flash-exp" }
     ]
   }
 ];
 
 const Settings: React.FC = () => {
-  const [formData, setFormData] = useState<settingFormData>(intitalForm);
-
+  const [formData, setFormData] = useState<SettingFormData>(initialForm);
   const [errors, setErrors] = useState({
     name: "",
     email: "",
@@ -88,14 +86,18 @@ const Settings: React.FC = () => {
     confirmNewPassword: "",
   });
   
-  const [apiKey, setApiKey] = useState("");
-  const [apiModal, setApiModal] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
+  const [openaiApiKey, setOpenaiApiKey] = useState("");
+  const [geminiApiKey, setGeminiApiKey] = useState("");
+  const [apiModel, setApiModel] = useState("");
   const [provider, setProvider] = useState("");
+  const [prompt, setPrompt] = useState("");
+  
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingUpdateApi, setIsLoadingUpdateApi] = useState(false);
   const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
-  const [showApiKey, setShowApiKey] = useState(false);
+  
+  const [showOpenaiApiKey, setShowOpenaiApiKey] = useState(false);
+  const [showGeminiApiKey, setShowGeminiApiKey] = useState(false);
   const [dataFetched, setDataFetched] = useState(false);
 
   const type = localStorage.getItem("type");
@@ -106,10 +108,9 @@ const Settings: React.FC = () => {
     
     const providerData = providerOptions.find(p => p.value === selectedProvider);
     if (providerData) {
-      setBaseUrl(providerData.baseUrl);
       setAvailableModels(providerData.models);
       // Reset to first model of the selected provider
-      setApiModal(providerData.models[0].value);
+      setApiModel(providerData.models[0].value);
     }
   };
 
@@ -123,48 +124,41 @@ const Settings: React.FC = () => {
       if (response.success) {
         console.log("API form data is:", response);
         
-        // Set API key from response
-        setApiKey(response.data.api_key || "");
+        setOpenaiApiKey(response.data.openai_api_key || "");
+        setGeminiApiKey(response.data.gemini_api_key || "");
+        setPrompt(response.data.prompt || "");
         
-        // Determine provider from base_url or direct provider field
-        let foundProviderOption: ProviderOption | undefined;
-        
+        // Set the provider
         if (response.data.provider) {
-          // If provider is directly specified in response
-          foundProviderOption = providerOptions.find(p => p.value === response.data.provider);
-          if (foundProviderOption) {
-            setProvider(foundProviderOption.value);
-          }
-        } else if (response.data.base_url) {
-          // Try to match by base_url
-          foundProviderOption = providerOptions.find(p => p.baseUrl === response.data.base_url);
-          if (foundProviderOption) {
-            setProvider(foundProviderOption.value);
-          }
-        }
-        
-        // If no provider found, default to first one
-        if (!foundProviderOption) {
-          foundProviderOption = providerOptions[0];
-          setProvider(foundProviderOption.value);
-        }
-        
-        // Set available models based on provider
-        setAvailableModels(foundProviderOption.models);
-        
-        // Set base URL (either from response or from matched provider)
-        setBaseUrl(response.data.base_url || foundProviderOption.baseUrl);
-        
-        // Set the model (if it exists in provider's models, otherwise use first model)
-        if (response.data.modal) {
-          const modelExists = foundProviderOption.models.some(model => model.value === response.data.modal);
-          if (modelExists) {
-            setApiModal(response.data.modal);
-          } else {
-            setApiModal(foundProviderOption.models[0].value);
+          setProvider(response.data.provider);
+          
+          // Set available models based on provider
+          const providerData = providerOptions.find(p => p.value === response.data.provider);
+          if (providerData) {
+            setAvailableModels(providerData.models);
           }
         } else {
-          setApiModal(foundProviderOption.models[0].value);
+          // Default to first provider if not specified
+          setProvider(providerOptions[0].value);
+          setAvailableModels(providerOptions[0].models);
+        }
+        
+        // Set the model (using either modal or model field from response)
+        const modelValue = response.data.model || response.data.modal;
+        if (modelValue) {
+          const currentProvider = providerOptions.find(p => p.value === response.data.provider);
+          if (currentProvider) {
+            const modelExists = currentProvider.models.some(model => model.value === modelValue);
+            if (modelExists) {
+              setApiModel(modelValue);
+            } else {
+              setApiModel(currentProvider.models[0].value);
+            }
+          }
+        } else {
+          // Default to first model of selected provider
+          const currentProvider = providerOptions.find(p => p.value === response.data.provider) || providerOptions[0];
+          setApiModel(currentProvider.models[0].value);
         }
         
         setDataFetched(true);
@@ -181,12 +175,17 @@ const Settings: React.FC = () => {
     
     if (type !== "admin") return;
 
-    if (!apiKey) {
-      notifyResponse({success: false, detail: "API key is required"});
+    if (!openaiApiKey && provider === "openai") {
+      notifyResponse({success: false, detail: "OpenAI API key is required"});
+      return;
+    }
+
+    if (!geminiApiKey && provider === "google_genai") {
+      notifyResponse({success: false, detail: "Gemini API key is required"});
       return;
     }
     
-    if (!apiModal) {
+    if (!apiModel) {
       notifyResponse({success: false, detail: "AI Model is required"});
       return;
     }
@@ -195,14 +194,12 @@ const Settings: React.FC = () => {
     setIsLoadingUpdateApi(true);
     
     try {
-      const selectedProviderData = providerOptions.find(p => p.value === provider);
-      const selectedBaseUrl = selectedProviderData ? selectedProviderData.baseUrl : baseUrl;
-      
       const response = await backendRequest<ApiResponse>("POST", "/update-api-key", {
-        api_key: apiKey,
-        model: apiModal,
-        base_url: selectedBaseUrl,
-        provider: provider
+        openai_api_key: openaiApiKey,
+        gemini_api_key: geminiApiKey,
+        model: apiModel,
+        provider: provider,
+        prompt: prompt
       });
       
       if (response.success) {
@@ -210,10 +207,12 @@ const Settings: React.FC = () => {
         
         // Update state with response data
         if (response.data) {
-          if (response.data.api_key) setApiKey(response.data.api_key);
-          if (response.data.modal) setApiModal(response.data.modal);
-          if (response.data.base_url) setBaseUrl(response.data.base_url);
+          if (response.data.openai_api_key) setOpenaiApiKey(response.data.openai_api_key);
+          if (response.data.gemini_api_key) setGeminiApiKey(response.data.gemini_api_key);
+          if (response.data.model) setApiModel(response.data.model);
+          else if (response.data.modal) setApiModel(response.data.modal);
           if (response.data.provider) setProvider(response.data.provider);
+          if (response.data.prompt !== undefined) setPrompt(response.data.prompt);
         
           // Update available models based on the provider
           if (response.data.provider) {
@@ -232,7 +231,7 @@ const Settings: React.FC = () => {
   };
 
   useEffect(() => {
-    setFormData(intitalForm);
+    setFormData(initialForm);
     // Fetch API key data when component mounts
     getApikeyData();
   }, []);
@@ -334,8 +333,12 @@ const Settings: React.FC = () => {
     }
   };
 
-  const toggleApiKeyVisibility = () => {
-    setShowApiKey(!showApiKey);
+  const toggleOpenaiApiKeyVisibility = () => {
+    setShowOpenaiApiKey(!showOpenaiApiKey);
+  };
+
+  const toggleGeminiApiKeyVisibility = () => {
+    setShowGeminiApiKey(!showGeminiApiKey);
   };
 
   return (
@@ -378,7 +381,6 @@ const Settings: React.FC = () => {
             )}
           </div>
 
-          {/* Password Update Section */}
           <h3 className="text-xl font-semibold mt-4">
             Change Password
           </h3>
@@ -426,7 +428,7 @@ const Settings: React.FC = () => {
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:border-blue-600 ${
                 errors.confirmNewPassword ? "border-red-500" : "border-gray-300"
               }`}
-              disabled={!formData.newPassword} // Disable if new password is not entered
+              disabled={!formData.newPassword}
             />
             {errors.confirmNewPassword && (
               <p className="text-red-500 text-sm">
@@ -473,22 +475,42 @@ const Settings: React.FC = () => {
             </div>
 
             <div className="flex sm:flex-row flex-col sm:space-x-4 space-y-4 sm:space-y-0">
-              <div className="w-full relative">
-                <label className="block text-gray-700 mb-2">API Key</label>
+              <div className={`w-full relative ${provider !== "openai" && "hidden"}`}>
+                <label className="block text-gray-700 mb-2">OpenAI API Key</label>
                 <div className="relative">
                   <input
-                    type={showApiKey ? "text" : "password"}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
+                    type={showOpenaiApiKey ? "text" : "password"}
+                    value={openaiApiKey}
+                    onChange={(e) => setOpenaiApiKey(e.target.value)}
                     className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 border-gray-300 pr-10"
-                    placeholder="Enter API Key"
+                    placeholder="Enter OpenAI API Key"
                   />
                   <button
                     type="button"
-                    onClick={toggleApiKeyVisibility}
+                    onClick={toggleOpenaiApiKeyVisibility}
                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-700 hover:text-blue-600"
                   >
-                    {showApiKey ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                    {showOpenaiApiKey ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className={`w-full relative ${provider !== "google_genai" && "hidden"}`}>
+                <label className="block text-gray-700 mb-2">Gemini API Key</label>
+                <div className="relative">
+                  <input
+                    type={showGeminiApiKey ? "text" : "password"}
+                    value={geminiApiKey}
+                    onChange={(e) => setGeminiApiKey(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 border-gray-300 pr-10"
+                    placeholder="Enter Gemini API Key"
+                  />
+                  <button
+                    type="button"
+                    onClick={toggleGeminiApiKeyVisibility}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-700 hover:text-blue-600"
+                  >
+                    {showGeminiApiKey ? <FiEyeOff size={18} /> : <FiEye size={18} />}
                   </button>
                 </div>
               </div>
@@ -497,8 +519,8 @@ const Settings: React.FC = () => {
                 <label className="block text-gray-700 mb-2">Select AI Model</label>
                 <select
                   name="model"
-                  value={apiModal}
-                  onChange={(e) => setApiModal(e.target.value)}
+                  value={apiModel}
+                  onChange={(e) => setApiModel(e.target.value)}
                   className="w-full px-4 py-2 border rounded-lg focus:outline-none bg-white text-gray-700 hover:border-blue-600 focus:border-blue-600 transition duration-300"
                   disabled={availableModels.length === 0}
                 >
@@ -509,6 +531,20 @@ const Settings: React.FC = () => {
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-gray-700 mb-2">Custom Prompt</label>
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 border-gray-300"
+                placeholder="Enter a custom prompt for AI interactions"
+                rows={4}
+              />
+              <p className="text-sm text-gray-600 mt-1">
+                This prompt will be used as a default system or context prompt for AI interactions.
+              </p>
             </div>
 
             <button
